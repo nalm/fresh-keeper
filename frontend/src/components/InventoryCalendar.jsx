@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, AlertCircle, Info, CheckCircle2 } from 'lucide-react';
 
 export default function InventoryCalendar({ items, onToggleStatus }) {
-  // Set default date to June 2026 as per local date 2026-06-14
-  const [currentDate, setCurrentDate] = useState(new Date('2026-06-14'));
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDateStr, setSelectedDateStr] = useState(null);
 
   const year = currentDate.getFullYear();
@@ -16,8 +15,17 @@ export default function InventoryCalendar({ items, onToggleStatus }) {
 
   const daysOfWeek = ['일', '월', '화', '수', '목', '금', '토'];
 
-  // Helper: Get remaining days from fixed today (2026-06-14)
-  const todayStr = '2026-06-14';
+  // Helper: Get remaining days from dynamically calculated today
+  const getTodayStr = () => {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const todayStr = getTodayStr();
+
   const getRemainingDays = (dateStr) => {
     const today = new Date(todayStr);
     const expDate = new Date(dateStr);
@@ -88,7 +96,7 @@ export default function InventoryCalendar({ items, onToggleStatus }) {
         }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span>📅 유통기한 달력</span>
-            <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', fontWeight: 400 }}>(기준일: 2026년 6월 14일)</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', fontWeight: 400 }}>(기준일: {todayStr})</span>
           </h2>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
