@@ -1,16 +1,13 @@
 {
-  "name": "fresh-keeper-root",
+  "name": "fresh-keeper-app",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "install:backend": "npm install --prefix backend",
     "install:frontend": "npm install --prefix frontend",
     "install:all": "npm install && npm run install:frontend",
-    "build": "npm run build --prefix frontend",
-    "start:backend": "node backend/server.js",
-    "start:frontend": "npm run dev --prefix frontend",
-    "dev": "npx concurrently -k -p \"[{name}]\" -n \"Backend,Frontend\" -c \"yellow,cyan\" \"node --watch backend/server.js\" \"npm run dev --prefix frontend\""
+    "build": "npm install --prefix frontend && npm run build --prefix frontend",
+    "dev": "vercel dev"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
