@@ -86,6 +86,24 @@ export default function App() {
     }
   };
 
+  // Update item (general updates like name)
+  const handleUpdateItem = async (id, updates) => {
+    try {
+      const response = await fetch(`/api/inventory/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      if (!response.ok) throw new Error('업데이트 실패');
+      
+      const updated = await response.json();
+      setItems(prev => prev.map(item => item.id === id ? updated : item));
+    } catch (err) {
+      console.error(err);
+      alert('식재료 정보를 수정하는 도중 오류가 발생했습니다.');
+    }
+  };
+
   // Upload success handler
   const handleUploadSuccess = (newItems) => {
     setItems(prev => [...newItems, ...prev]);
@@ -166,7 +184,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Tab Contents */}
       <main>
         {activeTab === 'dashboard' && (
           <Dashboard 
@@ -174,6 +191,7 @@ export default function App() {
             onToggleStatus={handleToggleStatus} 
             onDeleteItem={handleDeleteItem}
             onAddItem={handleAddItem}
+            onUpdateItem={handleUpdateItem}
           />
         )}
         

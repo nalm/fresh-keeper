@@ -196,14 +196,7 @@ export default function InventoryCalendar({ items, onToggleStatus }) {
                 </div>
 
                 {/* Items preview inside cells */}
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '2px',
-                  marginTop: '0.25rem',
-                  maxHeight: '44px',
-                  overflow: 'hidden'
-                }}>
+                <div className="calendar-items-preview">
                   {dayItems.slice(0, 2).map((item, i) => (
                     <div
                       key={item.id}
@@ -241,6 +234,28 @@ export default function InventoryCalendar({ items, onToggleStatus }) {
                       +{dayItems.length - 2}개 더
                     </div>
                   )}
+                </div>
+
+                {/* Mobile dot indicator */}
+                <div className="calendar-dots-preview">
+                  {dayItems.map((item) => {
+                    let dotColor = 'var(--color-success)';
+                    if (item.status === 'consumed') {
+                      dotColor = 'rgba(75, 85, 99, 0.4)';
+                    } else {
+                      const remaining = getRemainingDays(item.expirationDate);
+                      if (remaining < 0) dotColor = 'var(--color-danger)';
+                      else if (remaining <= 3) dotColor = 'var(--color-danger)';
+                      else if (remaining <= 7) dotColor = 'var(--color-warning)';
+                    }
+                    return (
+                      <span
+                        key={item.id}
+                        className="calendar-dot"
+                        style={{ backgroundColor: dotColor }}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             );

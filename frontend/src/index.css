@@ -273,3 +273,148 @@ header {
     grid-template-columns: 2fr 1fr;
   }
 }
+
+/* Calendar Cell Layouts */
+.calendar-items-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 0.25rem;
+  max-height: 44px;
+  overflow: hidden;
+}
+
+.calendar-dots-preview {
+  display: none;
+}
+
+/* Mobile Devices Optimization (< 768px) */
+@media (max-width: 768px) {
+  body {
+    padding-bottom: 80px; /* Leave space for bottom navigation bar */
+  }
+
+  .app-container {
+    padding: 1rem 0.75rem;
+  }
+
+  header {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+  }
+
+  .logo-text {
+    font-size: 1.4rem;
+  }
+
+  .logo-icon {
+    font-size: 1.8rem;
+  }
+
+  /* Sticky Bottom Tab Bar */
+  .tabs-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    margin: 0;
+    border-radius: 0;
+    border-top: 1px solid var(--glass-border);
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    background: rgba(10, 14, 26, 0.95);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    display: flex;
+    justify-content: space-around;
+    padding: 0.5rem;
+    z-index: 1000;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+  }
+
+  .tab-btn {
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    font-size: 0.7rem;
+    padding: 0.35rem 0.25rem;
+    border-radius: 0.375rem;
+  }
+
+  .tab-btn.active {
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  }
+
+  .tab-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .card {
+    padding: 1rem;
+  }
+
+  /* Adjust grids and flex containers */
+  .grid-dashboard {
+    gap: 1rem;
+  }
+
+  /* Optimize manual add form */
+  form {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+
+  form > div {
+    width: 100% !important;
+  }
+
+  form button {
+    width: 100% !important;
+    min-height: 44px; /* Touch target */
+  }
+
+  /* Optimize list item actions */
+  .inventory-item {
+    padding: 0.75rem !important;
+    gap: 0.5rem;
+  }
+
+  .inventory-item button {
+    min-height: 36px;
+    min-width: 36px;
+  }
+
+  /* Calendar Mobile Optimizations */
+  .calendar-items-preview {
+    display: none !important;
+  }
+
+  .calendar-dots-preview {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 3px;
+    justify-content: center;
+    margin-top: 0.35rem;
+    width: 100%;
+  }
+
+  .calendar-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .calendar-cell {
+    min-height: 58px !important;
+    padding: 0.35rem 0.25rem !important;
+  }
+}
+
+

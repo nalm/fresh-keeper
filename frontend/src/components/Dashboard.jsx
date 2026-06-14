@@ -1,12 +1,33 @@
 import React, { useState } from 'react';
-import { Search, Plus, Trash2, CheckSquare, Square, RefreshCw, Calendar, Tag, AlertTriangle } from 'lucide-react';
+import { Search, Plus, Trash2, CheckSquare, Square, RefreshCw, Calendar, Tag, AlertTriangle, Edit2, Check, X } from 'lucide-react';
 
-export default function Dashboard({ items, onToggleStatus, onDeleteItem, onAddItem }) {
+export default function Dashboard({ items, onToggleStatus, onDeleteItem, onAddItem, onUpdateItem }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('active'); // 'all', 'active', 'consumed'
   const [showAddForm, setShowAddForm] = useState(false);
   const [manualName, setManualName] = useState('');
   const [manualDate, setManualDate] = useState('');
+
+  // Inline editing states
+  const [editingId, setEditingId] = useState(null);
+  const [editingName, setEditingName] = useState('');
+
+  const handleEditClick = (id, name) => {
+    setEditingId(id);
+    setEditingName(name);
+  };
+
+  const handleCancelClick = () => {
+    setEditingId(null);
+    setEditingName('');
+  };
+
+  const handleSaveClick = async (id) => {
+    if (!editingName.trim()) return;
+    await onUpdateItem(id, { name: editingName });
+    setEditingId(null);
+    setEditingName('');
+  };
 
   // Fixed today date based on prompt metadata (2026-06-14)
   const today = new Date('2026-06-14');
@@ -328,15 +349,70 @@ export default function Dashboard({ items, onToggleStatus, onDeleteItem, onAddIt
                     </div>
 
                     {/* Name & Date */}
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ 
-                        fontWeight: 700, 
-                        color: item.status === 'consumed' ? 'var(--color-text-secondary)' : 'var(--color-text-primary)',
-                        textDecoration: item.status === 'consumed' ? 'line-through' : 'none'
-                      }}>
-                        {item.name}
-                      </span>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
+                      {editingId === item.id ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%' }} onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="text"
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            className="input-field"
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.9rem', width: '100%', maxWidth: '200px' }}
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveClick(item.id);
+                              if (e.key === 'Escape') handleCancelClick();
+                            }}
+                          />
+                          <button 
+                            className="btn" 
+                            onClick={() => handleSaveClick(item.id)}
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', minHeight: '32px' }}
+                          >
+                            저장
+                          </button>
+                          <button 
+                            className="btn btn-secondary" 
+                            onClick={handleCancelClick}
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', minHeight: '32px' }}
+                          >
+                            취소
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <span style={{ 
+                            fontWeight: 700, 
+                            color: item.status === 'consumed' ? 'var(--color-text-secondary)' : 'var(--color-text-primary)',
+                            textDecoration: item.status === 'consumed' ? 'line-through' : 'none'
+                          }}>
+                            {item.name}
+                          </span>
+                          
+                          {item.status !== 'consumed' && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleEditClick(item.id, item.name); }}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'var(--color-text-muted)',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                padding: '0.2rem',
+                                borderRadius: '0.25rem',
+                                transition: 'all var(--transition-fast)'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-secondary)'}
+                              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-muted)'}
+                              title="이름 수정"
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.15rem' }}>
                         <Calendar size={12} />
                         {item.expirationDate} 까지
                       </span>
