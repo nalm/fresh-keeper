@@ -52,7 +52,7 @@ export default function RecipeRecommender({ items }) {
     setExpandedRecipeIndex(null);
 
     try {
-      const response = await fetch('http://localhost:5000/api/recipes', {
+      const response = await fetch('/api/recipes', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
