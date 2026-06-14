@@ -11,22 +11,26 @@ export default function Dashboard({ items, onToggleStatus, onDeleteItem, onAddIt
   // Inline editing states
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState('');
+  const [editingDate, setEditingDate] = useState('');
 
-  const handleEditClick = (id, name) => {
+  const handleEditClick = (id, name, expirationDate) => {
     setEditingId(id);
     setEditingName(name);
+    setEditingDate(expirationDate);
   };
 
   const handleCancelClick = () => {
     setEditingId(null);
     setEditingName('');
+    setEditingDate('');
   };
 
   const handleSaveClick = async (id) => {
-    if (!editingName.trim()) return;
-    await onUpdateItem(id, { name: editingName });
+    if (!editingName.trim() || !editingDate) return;
+    await onUpdateItem(id, { name: editingName, expirationDate: editingDate });
     setEditingId(null);
     setEditingName('');
+    setEditingDate('');
   };
 
   // Fixed today date based on prompt metadata (2026-06-14)
@@ -351,33 +355,49 @@ export default function Dashboard({ items, onToggleStatus, onDeleteItem, onAddIt
                     {/* Name & Date */}
                     <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
                       {editingId === item.id ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%' }} onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="text"
-                            value={editingName}
-                            onChange={(e) => setEditingName(e.target.value)}
-                            className="input-field"
-                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.9rem', width: '100%', maxWidth: '200px' }}
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleSaveClick(item.id);
-                              if (e.key === 'Escape') handleCancelClick();
-                            }}
-                          />
-                          <button 
-                            className="btn" 
-                            onClick={() => handleSaveClick(item.id)}
-                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', minHeight: '32px' }}
-                          >
-                            저장
-                          </button>
-                          <button 
-                            className="btn btn-secondary" 
-                            onClick={handleCancelClick}
-                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', minHeight: '32px' }}
-                          >
-                            취소
-                          </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }} onClick={(e) => e.stopPropagation()}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', width: '100%' }}>
+                            <input
+                              type="text"
+                              value={editingName}
+                              onChange={(e) => setEditingName(e.target.value)}
+                              className="input-field"
+                              placeholder="제품명"
+                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.9rem', flex: '1 1 200px' }}
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveClick(item.id);
+                                if (e.key === 'Escape') handleCancelClick();
+                              }}
+                            />
+                            <input
+                              type="date"
+                              value={editingDate}
+                              onChange={(e) => setEditingDate(e.target.value)}
+                              className="input-field"
+                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.9rem', width: '140px' }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveClick(item.id);
+                                if (e.key === 'Escape') handleCancelClick();
+                              }}
+                            />
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button 
+                              className="btn" 
+                              onClick={() => handleSaveClick(item.id)}
+                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', minHeight: '32px' }}
+                            >
+                              저장
+                            </button>
+                            <button 
+                              className="btn btn-secondary" 
+                              onClick={handleCancelClick}
+                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', minHeight: '32px' }}
+                            >
+                              취소
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
@@ -391,7 +411,7 @@ export default function Dashboard({ items, onToggleStatus, onDeleteItem, onAddIt
                           
                           {item.status !== 'consumed' && (
                             <button
-                              onClick={(e) => { e.stopPropagation(); handleEditClick(item.id, item.name); }}
+                              onClick={(e) => { e.stopPropagation(); handleEditClick(item.id, item.name, item.expirationDate); }}
                               style={{
                                 background: 'transparent',
                                 border: 'none',
@@ -405,7 +425,7 @@ export default function Dashboard({ items, onToggleStatus, onDeleteItem, onAddIt
                               }}
                               onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-secondary)'}
                               onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-muted)'}
-                              title="이름 수정"
+                              title="정보 수정"
                             >
                               <Edit2 size={12} />
                             </button>
