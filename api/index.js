@@ -145,43 +145,20 @@ app.post('/api/upload', upload.array('images'), async (req, res) => {
         finalDate = fallback.toISOString().split('T')[0];
       }
 
-      let addedItem;
+      const extractedItem = {
+        name: parsedData.name || '알 수 없는 상품',
+        expirationDate: finalDate,
+        imageUrl: imageUrl
+      };
 
-      if (useSupabase) {
-        // Add to Supabase database
-        const { data: dbData, error: dbError } = await supabase
-          .from('inventory')
-          .insert([
-            {
-              name: parsedData.name || '알 수 없는 상품',
-              expiration_date: finalDate,
-              status: 'active',
-              image_url: imageUrl
-            }
-          ])
-          .select();
-
-        if (dbError) throw new Error(`Supabase DB insert error: ${dbError.message}`);
-        addedItem = mapDbItemToFrontend(dbData[0]);
-      } else {
-        // Add to local JSON database fallback
-        addedItem = db.addItem({
-          id: uuidv4(),
-          name: parsedData.name || '알 수 없는 상품',
-          expirationDate: finalDate,
-          status: 'active',
-          imageUrl: imageUrl
-        });
-      }
-
-      results.push(addedItem);
+      results.push(extractedItem);
     } catch (error) {
       console.error(`Error processing file ${file.originalname}:`, error);
       errors.push({ filename: file.originalname, error: error.message });
     }
   }
 
-  res.json({ success: true, addedItems: results, errors });
+  res.json({ success: true, extractedItems: results, errors });
 });
 
 // 2. Get all inventory items
@@ -204,41 +181,51 @@ app.get('/api/inventory', async (req, res) => {
   }
 });
 
-// 3. Add manual item
+// 3. Add manual item (supports both single object and array of objects for bulk insert)
 app.post('/api/inventory', async (req, res) => {
   try {
-    const { name, expirationDate } = req.body;
-    if (!name || !expirationDate) {
-      return res.status(400).json({ error: 'Name and expirationDate are required.' });
-    }
+    const body = req.body;
+    const itemsToAdd = Array.isArray(body) ? body : [body];
     
-    let addedItem;
+    // Validate all items
+    for (const item of itemsToAdd) {
+      if (!item.name || !item.expirationDate) {
+        return res.status(400).json({ error: 'Name and expirationDate are required for all items.' });
+      }
+    }
+
+    const addedResults = [];
 
     if (useSupabase) {
+      const dbRows = itemsToAdd.map(item => ({
+        name: item.name,
+        expiration_date: item.expirationDate,
+        status: item.status || 'active',
+        image_url: item.imageUrl || null
+      }));
+
       const { data, error } = await supabase
         .from('inventory')
-        .insert([
-          {
-            name,
-            expiration_date: expirationDate,
-            status: 'active'
-          }
-        ])
+        .insert(dbRows)
         .select();
 
       if (error) throw error;
-      addedItem = mapDbItemToFrontend(data[0]);
+      addedResults.push(...data.map(mapDbItemToFrontend));
     } else {
       // Local JSON DB fallback
-      addedItem = db.addItem({
-        id: uuidv4(),
-        name,
-        expirationDate,
-        status: 'active'
-      });
+      for (const item of itemsToAdd) {
+        const added = db.addItem({
+          id: uuidv4(),
+          name: item.name,
+          expirationDate: item.expirationDate,
+          status: item.status || 'active',
+          imageUrl: item.imageUrl || null
+        });
+        addedResults.push(mapDbItemToFrontend(added));
+      }
     }
     
-    res.status(201).json(addedItem);
+    res.status(201).json(Array.isArray(body) ? addedResults : addedResults[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
