@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Camera, Loader2, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function ImageUploader({ onUploadSuccess }) {
@@ -8,7 +8,77 @@ export default function ImageUploader({ onUploadSuccess }) {
   const [loading, setLoading] = useState(false);
   const [scanStatus, setScanStatus] = useState(''); // "uploading", "ocr_scanning", "success"
   const [error, setError] = useState(null);
+  
+  // Camera capture states and refs
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [stream, setStream] = useState(null);
+  
   const fileInputRef = useRef(null);
+  const videoRef = useRef(null);
+
+  // Stop camera tracks on component unmount
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [stream]);
+
+  // Camera capture handlers
+  const startCamera = async () => {
+    setError(null);
+    setIsCameraOpen(true);
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' } // Prioritize back camera on mobile devices
+      });
+      setStream(mediaStream);
+      // Wait for element to render in DOM
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = mediaStream;
+        }
+      }, 100);
+    } catch (err) {
+      console.error(err);
+      setError('카메라 권한을 획득할 수 없습니다. 브라우저 카메라 액세스 설정을 확인해 주세요.');
+      setIsCameraOpen(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+    setIsCameraOpen(false);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current) {
+      const video = videoRef.current;
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const filename = `camera-capture-${Date.now()}.jpg`;
+          const file = new File([blob], filename, { type: 'image/jpeg' });
+          
+          setSelectedFiles(prev => [...prev, file]);
+          const previewUrl = URL.createObjectURL(file);
+          setPreviews(prev => [...prev, previewUrl]);
+          
+          stopCamera();
+        }
+      }, 'image/jpeg', 0.95);
+    }
+  };
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -58,7 +128,6 @@ export default function ImageUploader({ onUploadSuccess }) {
   const removeFile = (index) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
     setPreviews(prev => {
-      // Revoke the object URL to avoid memory leaks
       URL.revokeObjectURL(prev[index]);
       return prev.filter((_, i) => i !== index);
     });
@@ -77,9 +146,8 @@ export default function ImageUploader({ onUploadSuccess }) {
     });
 
     try {
-      // Simulate step-by-step progress for premium UX
       setTimeout(() => {
-        setScanStatus('ocr_scanning'); // Switching text to "Extracting name & expiration dates..."
+        setScanStatus('ocr_scanning');
       }, 1500);
 
       const response = await fetch('/api/upload', {
@@ -100,7 +168,6 @@ export default function ImageUploader({ onUploadSuccess }) {
       setScanStatus('success');
       setTimeout(() => {
         onUploadSuccess(data.addedItems);
-        // Reset state
         setSelectedFiles([]);
         setPreviews([]);
         setLoading(false);
@@ -120,64 +187,144 @@ export default function ImageUploader({ onUploadSuccess }) {
       <div>
         <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.25rem' }}>제품 사진 등록</h2>
         <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem' }}>
-          제품 포장지의 전면 혹은 소비기한 표시 부분을 촬영해 올려주세요. 복수 등록이 가능합니다.
+          제품 포장지의 전면 혹은 소비기한 표시 부분을 카메라로 촬영하거나 이미지 파일로 업로드해 주세요.
         </p>
       </div>
 
-      {/* Drag & Drop Zone */}
-      <div 
-        onDragEnter={handleDrag}
-        onDragOver={handleDrag}
-        onDragLeave={handleDrag}
-        onDrop={handleDrop}
-        onClick={triggerFileSelect}
-        style={{
-          border: '2px dashed ' + (dragActive ? 'var(--color-secondary)' : 'var(--glass-border)'),
+      {isCameraOpen ? (
+        /* Camera Preview Viewport */
+        <div style={{
+          position: 'relative',
           borderRadius: '0.75rem',
-          padding: '2.5rem 1.5rem',
-          textAlign: 'center',
-          cursor: 'pointer',
-          background: dragActive ? 'rgba(6, 182, 212, 0.05)' : 'rgba(255, 255, 255, 0.01)',
-          transition: 'all var(--transition-fast)',
+          overflow: 'hidden',
+          background: '#000',
+          border: '1px solid var(--glass-border)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center',
-          gap: '0.75rem',
-          position: 'relative',
-          overflow: 'hidden'
-        }}
-      >
-        <input 
-          type="file" 
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          multiple 
-          accept="image/*" 
-          style={{ display: 'none' }} 
-        />
-        
-        <div style={{
-          width: '3.5rem',
-          height: '3.5rem',
-          borderRadius: '50%',
-          background: 'rgba(99, 102, 241, 0.1)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--color-primary)',
-          marginBottom: '0.25rem'
+          gap: '1.25rem',
+          padding: '1.25rem',
+          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.5)'
         }}>
-          <Upload size={24} />
+          <video 
+            ref={videoRef}
+            autoPlay 
+            playsInline 
+            style={{
+              width: '100%',
+              maxHeight: '350px',
+              borderRadius: '0.5rem',
+              objectFit: 'cover',
+              transform: 'scaleX(1)', // Keep it non-mirrored so packaging text reads correctly
+              border: '1px solid var(--glass-border)'
+            }}
+          />
+          <div style={{ display: 'flex', gap: '1.5rem', width: '100%', justifyContent: 'center', alignItems: 'center' }}>
+            <button 
+              className="btn btn-secondary" 
+              onClick={stopCamera}
+              style={{ padding: '0.5rem 1.25rem', fontSize: '0.9rem', whiteSpace: 'nowrap' }}
+            >
+              취소
+            </button>
+            
+            {/* Shutter Capture Button */}
+            <button 
+              onClick={capturePhoto}
+              style={{
+                width: '3.5rem',
+                height: '3.5rem',
+                borderRadius: '50%',
+                background: '#fff',
+                border: '4px solid var(--color-primary)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 15px rgba(99, 102, 241, 0.4)',
+                transition: 'transform var(--transition-fast)'
+              }}
+              onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.9)'}
+              onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            >
+              <div style={{
+                width: '2.1rem',
+                height: '2.1rem',
+                borderRadius: '50%',
+                background: 'var(--color-danger)'
+              }} />
+            </button>
+            <div style={{ width: '60px' }} /> {/* Invisible spacer to balance the cancel button */}
+          </div>
         </div>
+      ) : (
+        /* Drag & Drop Zone */
+        <div 
+          onDragEnter={handleDrag}
+          onDragOver={handleDrag}
+          onDragLeave={handleDrag}
+          onDrop={handleDrop}
+          onClick={triggerFileSelect}
+          style={{
+            border: '2px dashed ' + (dragActive ? 'var(--color-secondary)' : 'var(--glass-border)'),
+            borderRadius: '0.75rem',
+            padding: '2.5rem 1.5rem',
+            textAlign: 'center',
+            cursor: 'pointer',
+            background: dragActive ? 'rgba(6, 182, 212, 0.05)' : 'rgba(255, 255, 255, 0.01)',
+            transition: 'all var(--transition-fast)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.75rem',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+        >
+          <input 
+            type="file" 
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            multiple 
+            accept="image/*" 
+            style={{ display: 'none' }} 
+          />
+          
+          <div style={{
+            width: '3.5rem',
+            height: '3.5rem',
+            borderRadius: '50%',
+            background: 'rgba(99, 102, 241, 0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--color-primary)',
+            marginBottom: '0.25rem'
+          }}>
+            <Upload size={24} />
+          </div>
 
-        <div>
-          <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>사진 드래그 앤 드롭</span>
-          <span style={{ color: 'var(--color-text-secondary)' }}> 또는 </span>
-          <span style={{ fontWeight: 600, color: 'var(--color-secondary)', textDecoration: 'underline' }}>컴퓨터에서 선택</span>
+          <div>
+            <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>사진 드래그 앤 드롭</span>
+            <span style={{ color: 'var(--color-text-secondary)' }}> 또는 </span>
+            <span style={{ fontWeight: 600, color: 'var(--color-secondary)', textDecoration: 'underline' }}>컴퓨터에서 선택</span>
+          </div>
+          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }}>
+            PNG, JPG, JPEG (최대 10MB)
+          </span>
+
+          {/* Integrated Device Camera capture button */}
+          <button 
+            className="btn btn-secondary"
+            onClick={(e) => { e.stopPropagation(); startCamera(); }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', zIndex: 5, fontSize: '0.85rem' }}
+          >
+            <Camera size={14} />
+            <span>카메라로 촬영하기</span>
+          </button>
         </div>
-        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>PNG, JPG, JPEG (최대 10MB)</span>
-      </div>
+      )}
 
       {error && (
         <div style={{ 
@@ -273,7 +420,6 @@ export default function ImageUploader({ onUploadSuccess }) {
           textAlign: 'center',
           overflow: 'hidden'
         }}>
-          {/* Neon Scanner Sweep Line Effect */}
           {scanStatus === 'ocr_scanning' && (
             <div style={{
               position: 'absolute',
