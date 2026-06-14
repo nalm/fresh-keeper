@@ -4,7 +4,13 @@ import multer from 'multer';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
-import { supabase } from './supabase.js';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { supabase, useSupabase } from './supabase.js';
+import db from './db.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -12,7 +18,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Set up in-memory storage for file uploads (since Vercel is serverless/stateless)
+// Set up in-memory storage for file uploads (handles both serverless & local hybrid)
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
@@ -26,14 +32,14 @@ function mapDbItemToFrontend(item) {
   return {
     id: item.id,
     name: item.name,
-    expirationDate: item.expiration_date,
+    expirationDate: item.expiration_date || item.expirationDate,
     status: item.status,
-    imageUrl: item.image_url,
-    addedAt: item.created_at
+    imageUrl: item.image_url || item.imageUrl,
+    addedAt: item.created_at || item.addedAt
   };
 }
 
-// 1. Upload images to Supabase Storage and extract info using Gemini
+// 1. Upload images (to Supabase Storage or local folder) and extract info using Gemini
 app.post('/api/upload', upload.array('images'), async (req, res) => {
   if (!req.files || req.files.length === 0) {
     return res.status(400).json({ error: 'No files uploaded.' });
@@ -44,27 +50,44 @@ app.post('/api/upload', upload.array('images'), async (req, res) => {
 
   for (const file of req.files) {
     try {
-      // Generate unique name for the file
       const filename = `${uuidv4()}${path.extname(file.originalname)}`;
+      let imageUrl = '';
       
-      // Upload buffer to Supabase Storage Bucket 'food-images'
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('food-images')
-        .upload(filename, file.buffer, {
-          contentType: file.mimetype,
-          upsert: true
-        });
+      if (useSupabase) {
+        // Upload to Supabase Storage Bucket 'food-images'
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('food-images')
+          .upload(filename, file.buffer, {
+            contentType: file.mimetype,
+            upsert: true
+          });
 
-      if (uploadError) {
-        throw new Error(`Supabase Storage upload error: ${uploadError.message}`);
+        if (uploadError) {
+          throw new Error(`Supabase Storage upload error: ${uploadError.message}`);
+        }
+
+        // Get public URL of the uploaded image
+        const { data: urlData } = supabase.storage
+          .from('food-images')
+          .getPublicUrl(filename);
+
+        imageUrl = urlData.publicUrl;
+      } else {
+        // Fallback: Save to local directory (local development)
+        try {
+          const localUploadDir = path.join(__dirname, '..', 'frontend', 'public', 'uploads');
+          if (!fs.existsSync(localUploadDir)) {
+            fs.mkdirSync(localUploadDir, { recursive: true });
+          }
+          const localFilePath = path.join(localUploadDir, filename);
+          fs.writeFileSync(localFilePath, file.buffer);
+          imageUrl = `/uploads/${filename}`;
+        } catch (localWriteError) {
+          console.warn('Failed writing to local public/uploads. Using base64 Data URL fallback.', localWriteError);
+          // If local disk writing fails (e.g. on serverless Vercel), use base64 data URL
+          imageUrl = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+        }
       }
-
-      // Get public URL of the uploaded image
-      const { data: urlData } = supabase.storage
-        .from('food-images')
-        .getPublicUrl(filename);
-
-      const imageUrl = urlData.publicUrl;
 
       // Convert buffer to base64 for Gemini
       const imagePart = {
@@ -122,24 +145,36 @@ app.post('/api/upload', upload.array('images'), async (req, res) => {
         finalDate = fallback.toISOString().split('T')[0];
       }
 
-      // Add to Supabase database
-      const { data: dbData, error: dbError } = await supabase
-        .from('inventory')
-        .insert([
-          {
-            name: parsedData.name || '알 수 없는 상품',
-            expiration_date: finalDate,
-            status: 'active',
-            image_url: imageUrl
-          }
-        ])
-        .select();
+      let addedItem;
 
-      if (dbError) {
-        throw new Error(`Supabase DB insert error: ${dbError.message}`);
+      if (useSupabase) {
+        // Add to Supabase database
+        const { data: dbData, error: dbError } = await supabase
+          .from('inventory')
+          .insert([
+            {
+              name: parsedData.name || '알 수 없는 상품',
+              expiration_date: finalDate,
+              status: 'active',
+              image_url: imageUrl
+            }
+          ])
+          .select();
+
+        if (dbError) throw new Error(`Supabase DB insert error: ${dbError.message}`);
+        addedItem = mapDbItemToFrontend(dbData[0]);
+      } else {
+        // Add to local JSON database fallback
+        addedItem = db.addItem({
+          id: uuidv4(),
+          name: parsedData.name || '알 수 없는 상품',
+          expirationDate: finalDate,
+          status: 'active',
+          imageUrl: imageUrl
+        });
       }
 
-      results.push(mapDbItemToFrontend(dbData[0]));
+      results.push(addedItem);
     } catch (error) {
       console.error(`Error processing file ${file.originalname}:`, error);
       errors.push({ filename: file.originalname, error: error.message });
@@ -152,15 +187,18 @@ app.post('/api/upload', upload.array('images'), async (req, res) => {
 // 2. Get all inventory items
 app.get('/api/inventory', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('inventory')
-      .select('*')
-      .order('expiration_date', { ascending: true });
+    if (useSupabase) {
+      const { data, error } = await supabase
+        .from('inventory')
+        .select('*')
+        .order('expiration_date', { ascending: true });
 
-    if (error) throw error;
-    
-    const mapped = data.map(mapDbItemToFrontend);
-    res.json(mapped);
+      if (error) throw error;
+      res.json(data.map(mapDbItemToFrontend));
+    } else {
+      // Local JSON DB fallback
+      res.json(db.getItems().map(mapDbItemToFrontend));
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -174,20 +212,33 @@ app.post('/api/inventory', async (req, res) => {
       return res.status(400).json({ error: 'Name and expirationDate are required.' });
     }
     
-    const { data, error } = await supabase
-      .from('inventory')
-      .insert([
-        {
-          name,
-          expiration_date: expirationDate,
-          status: 'active'
-        }
-      ])
-      .select();
+    let addedItem;
 
-    if (error) throw error;
+    if (useSupabase) {
+      const { data, error } = await supabase
+        .from('inventory')
+        .insert([
+          {
+            name,
+            expiration_date: expirationDate,
+            status: 'active'
+          }
+        ])
+        .select();
+
+      if (error) throw error;
+      addedItem = mapDbItemToFrontend(data[0]);
+    } else {
+      // Local JSON DB fallback
+      addedItem = db.addItem({
+        id: uuidv4(),
+        name,
+        expirationDate,
+        status: 'active'
+      });
+    }
     
-    res.status(201).json(mapDbItemToFrontend(data[0]));
+    res.status(201).json(addedItem);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -199,23 +250,40 @@ app.put('/api/inventory/:id', async (req, res) => {
     const { id } = req.params;
     const { status, name, expirationDate } = req.body;
     
-    const updates = {};
-    if (status) updates.status = status;
-    if (name) updates.name = name;
-    if (expirationDate) updates.expiration_date = expirationDate;
-    
-    const { data, error } = await supabase
-      .from('inventory')
-      .update(updates)
-      .eq('id', id)
-      .select();
+    let updatedItem;
 
-    if (error) throw error;
-    if (!data || data.length === 0) {
-      return res.status(404).json({ error: 'Item not found.' });
+    if (useSupabase) {
+      const updates = {};
+      if (status) updates.status = status;
+      if (name) updates.name = name;
+      if (expirationDate) updates.expiration_date = expirationDate;
+      
+      const { data, error } = await supabase
+        .from('inventory')
+        .update(updates)
+        .eq('id', id)
+        .select();
+
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        return res.status(404).json({ error: 'Item not found.' });
+      }
+      updatedItem = mapDbItemToFrontend(data[0]);
+    } else {
+      // Local JSON DB fallback
+      const updates = {};
+      if (status) updates.status = status;
+      if (name) updates.name = name;
+      if (expirationDate) updates.expirationDate = expirationDate;
+
+      const updated = db.updateItem(id, updates);
+      if (!updated) {
+        return res.status(404).json({ error: 'Item not found.' });
+      }
+      updatedItem = mapDbItemToFrontend(updated);
     }
     
-    res.json(mapDbItemToFrontend(data[0]));
+    res.json(updatedItem);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -225,18 +293,30 @@ app.put('/api/inventory/:id', async (req, res) => {
 app.delete('/api/inventory/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { data, error } = await supabase
-      .from('inventory')
-      .delete()
-      .eq('id', id)
-      .select();
+    let deletedItem;
 
-    if (error) throw error;
-    if (!data || data.length === 0) {
-      return res.status(404).json({ error: 'Item not found.' });
+    if (useSupabase) {
+      const { data, error } = await supabase
+        .from('inventory')
+        .delete()
+        .eq('id', id)
+        .select();
+
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        return res.status(404).json({ error: 'Item not found.' });
+      }
+      deletedItem = mapDbItemToFrontend(data[0]);
+    } else {
+      // Local JSON DB fallback
+      const deleted = db.deleteItem(id);
+      if (!deleted) {
+        return res.status(404).json({ error: 'Item not found.' });
+      }
+      deletedItem = mapDbItemToFrontend(deleted);
     }
     
-    res.json({ success: true, deleted: mapDbItemToFrontend(data[0]) });
+    res.json({ success: true, deleted: deletedItem });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
